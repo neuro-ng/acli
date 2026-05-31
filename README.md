@@ -280,4 +280,4 @@ Cross-compilation targets:
 
 Apache 2.0 — see [LICENSE](LICENSE).
 
-Original Go implementation: [neuro-ng/acli](https://github.com/neuro-ng/acli)
+Original Go implementation: [chinmaymk/acli](https://github.com/chinmaymk/acli)
