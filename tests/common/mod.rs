@@ -44,10 +44,47 @@ pub fn http_204() -> String {
     "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n".to_string()
 }
 
+/// Reads a complete HTTP request (headers + body).
+///
+/// A single `read()` call may return only the headers on Windows, leaving the
+/// body unread. Dropping the stream with unread data triggers a RST, which
+/// Windows propagates back to the client as WSAECONNRESET (10054) — even if
+/// the server already wrote a valid response. Reading the full request first
+/// ensures the stream closes cleanly with a FIN on all platforms.
 pub fn read_request(stream: &mut std::net::TcpStream) -> String {
+    let mut raw: Vec<u8> = Vec::new();
     let mut buf = [0u8; 4096];
-    let n = stream.read(&mut buf).unwrap_or(0);
-    String::from_utf8_lossy(&buf[..n]).to_string()
+
+    loop {
+        match stream.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                raw.extend_from_slice(&buf[..n]);
+
+                // Locate the end of the HTTP header block (\r\n\r\n)
+                if let Some(hdr_end) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let body_start = hdr_end + 4;
+                    // Honour Content-Length so we wait for the full body
+                    let content_length = String::from_utf8_lossy(&raw[..hdr_end])
+                        .split("\r\n")
+                        .find(|l| l.to_ascii_lowercase().starts_with("content-length:"))
+                        .and_then(|l| l.splitn(2, ':').nth(1))
+                        .and_then(|v| v.trim().parse::<usize>().ok())
+                        .unwrap_or(0);
+
+                    if raw.len() >= body_start + content_length {
+                        break; // complete request received
+                    }
+                }
+
+                if raw.len() > 16_384 {
+                    break; // safety limit — no test request exceeds this
+                }
+            }
+        }
+    }
+
+    String::from_utf8_lossy(&raw).to_string()
 }
 
 /// Starts the Phase 1 mock server (JSM alerts + basic Jira reads).
