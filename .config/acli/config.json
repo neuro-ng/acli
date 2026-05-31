@@ -1,0 +1,11 @@
+{
+  "default_profile": "test",
+  "profiles": {
+    "test": {
+      "name": "test",
+      "atlassian_url": "https://test-instance.atlassian.net",
+      "email": "test@example.com",
+      "api_token": "test-api-token-value"
+    }
+  }
+}
