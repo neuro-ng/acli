@@ -1948,16 +1948,19 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
                 return Err("Usage: acli alert get <id-or-alias>".to_string());
             }
             let identifier = &args[1];
-            let mut id_type = "id";
+            let mut explicit_type: Option<String> = None;
             let mut i = 2;
             while i < args.len() {
                 if args[i] == "--type" && i + 1 < args.len() {
-                    id_type = &args[i + 1];
+                    explicit_type = Some(args[i + 1].clone());
                     i += 2;
                 } else {
                     i += 1;
                 }
             }
+            let id_type = explicit_type
+                .as_deref()
+                .unwrap_or_else(|| alerts::infer_id_type(identifier));
             let cfg = Config::load()?;
             let client = Client::new(cfg.get_profile(profile)?);
             let alert = alerts::get_alert(&client, identifier, id_type)?;

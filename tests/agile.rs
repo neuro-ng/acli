@@ -40,7 +40,7 @@ fn test_agile_get_sprint_issues() {
     let client = Client::new(mock_profile(&url));
 
     let results = agile::get_sprint_issues(&client, 101, 0, 50).unwrap();
-    assert_eq!(results.total, 1);
+    assert_eq!(results.total, Some(1));
     assert_eq!(results.issues[0].key, "TEST-201");
     assert_eq!(results.issues[0].fields.summary, "Sprint task");
 }
@@ -51,7 +51,7 @@ fn test_agile_get_epic_issues() {
     let client = Client::new(mock_profile(&url));
 
     let results = agile::get_epic_issues(&client, "EPIC-1", 0, 50).unwrap();
-    assert_eq!(results.total, 1);
+    assert_eq!(results.total, Some(1));
     assert_eq!(results.issues[0].key, "TEST-301");
     assert_eq!(results.issues[0].fields.summary, "Epic child issue");
 }

@@ -146,23 +146,22 @@ pub fn start_mock_atlassian_sdk() -> String {
                 }"#,
                 )
             } else if req.contains("GET /jsm/ops/api/mock-cloud-id-123/v1/alerts/") {
+                // Single alert: real Opsgenie API returns the Alert object directly (no wrapper).
                 http_ok(
-                    r#"{
-                    "data": {
-                        "id": "alert-uuid-1", "tinyId": "101", "alias": "alert-alias-1",
-                        "message": "Memory leak detected", "status": "open",
-                        "acknowledged": false, "createdAt": "2026-05-30T00:00:00Z", "priority": "P2"
-                    }
-                }"#,
+                    r#"{"id":"alert-uuid-1","tinyId":"101","alias":"alert-alias-1","message":"Memory leak detected","status":"open","acknowledged":false,"createdAt":"2026-05-30T00:00:00Z","priority":"P2","tags":[],"responders":[],"actions":[]}"#,
                 )
             } else if req.contains("GET /jsm/ops/api/mock-cloud-id-123/v1/alerts") {
+                // List alerts: real JSM API wraps in `values`
                 http_ok(
                     r#"{
-                    "data": [{
+                    "values": [{
                         "id": "alert-uuid-1", "tinyId": "101", "alias": "alert-alias-1",
                         "message": "Memory leak detected", "status": "open",
-                        "acknowledged": false, "createdAt": "2026-05-30T00:00:00Z", "priority": "P2"
-                    }]
+                        "acknowledged": false, "createdAt": "2026-05-30T00:00:00Z", "priority": "P2",
+                        "tags": [], "responders": [], "actions": []
+                    }],
+                    "links": {"next": ""},
+                    "count": 1
                 }"#,
                 )
             } else if req.contains("POST /jsm/ops/api/mock-cloud-id-123/v1/alerts") {

@@ -20,7 +20,7 @@ fn test_mock_jira_search_jql() {
     let url = start_mock_atlassian_sdk();
     let client = Client::new(mock_profile(&url));
     let results = jira::search_jql(&client, "project = TEST", 0, 50, &["summary"]).unwrap();
-    assert_eq!(results.total, 1);
+    assert_eq!(results.total, Some(1));
     assert_eq!(results.issues[0].key, "TEST-101");
 }
 
