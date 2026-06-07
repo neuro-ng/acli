@@ -1965,19 +1965,58 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
             let client = Client::new(cfg.get_profile(profile)?);
             let alert = alerts::get_alert(&client, identifier, id_type)?;
 
+            let notes = alerts::list_alert_notes(&client, &alert.id).unwrap_or_default();
+            let logs = alerts::list_alert_logs(&client, &alert.id).unwrap_or_default();
+
             if output == "json" {
-                println!("{}", serde_json::to_string_pretty(&alert).unwrap());
+                let mut obj = serde_json::to_value(&alert).unwrap();
+                obj["notes"] = serde_json::to_value(&notes).unwrap();
+                obj["activityLog"] = serde_json::to_value(&logs).unwrap();
+                println!("{}", serde_json::to_string_pretty(&obj).unwrap());
                 return Ok(());
             }
 
             println!("ID:       {}", alert.id);
-            println!("Tiny ID:  {}", alert.tiny_id.unwrap_or_default());
-            println!("Alias:    {}", alert.alias.unwrap_or_default());
+            println!("Tiny ID:  {}", alert.tiny_id.as_deref().unwrap_or("-"));
+            println!("Alias:    {}", alert.alias.as_deref().unwrap_or("-"));
             println!("Message:  {}", alert.message);
             println!("Status:   {}", alert.status);
             println!("Acked:    {}", alert.acknowledged);
-            println!("Created:  {}", alert.created_at);
             println!("Priority: {}", alert.priority);
+            println!("Created:  {}", alert.created_at);
+            if let Some(desc) = &alert.description {
+                if !desc.is_empty() {
+                    println!("Desc:     {}", desc);
+                }
+            }
+            if !alert.responders.is_empty() {
+                println!("Responders:");
+                for r in &alert.responders {
+                    println!(
+                        "  {} ({})",
+                        r.id.as_deref().unwrap_or("-"),
+                        r.responder_type.as_deref().unwrap_or("unknown")
+                    );
+                }
+            }
+            if notes.is_empty() {
+                println!("Notes:    (none)");
+            } else {
+                println!("Notes:");
+                for n in &notes {
+                    let ts = n.created_at.as_deref().unwrap_or("-");
+                    let owner = n.owner.as_deref().unwrap_or("unknown");
+                    println!("  [{}] {}: {}", ts, owner, n.note);
+                }
+            }
+            if !logs.is_empty() {
+                println!("Activity:");
+                for l in &logs {
+                    let ts = l.log_time.as_deref().unwrap_or("-");
+                    let owner = l.owner.as_deref().unwrap_or("system");
+                    println!("  [{}] {}: {}", ts, owner, l.log);
+                }
+            }
             Ok(())
         }
         "create" => {

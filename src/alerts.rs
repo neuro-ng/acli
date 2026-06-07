@@ -54,6 +54,34 @@ pub struct AlertListResponse {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AlertNote {
+    pub note: String,
+    pub owner: Option<String>,
+    #[serde(rename = "createdAt")]
+    pub created_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AlertNotesResponse {
+    pub values: Vec<AlertNote>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AlertLog {
+    #[serde(rename = "logTime")]
+    pub log_time: Option<String>,
+    #[serde(rename = "logType")]
+    pub log_type: Option<String>,
+    pub log: String,
+    pub owner: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AlertLogsResponse {
+    pub values: Vec<AlertLog>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CreateAlertPayload {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -102,24 +130,58 @@ pub fn infer_id_type(identifier: &str) -> &'static str {
     }
 }
 
-pub fn get_alert(client: &Client, identifier: &str, id_type: &str) -> Result<Alert, String> {
-    if id_type == "tinyId" {
-        // Atlassian JSM cloud does not honour identifierType=tinyId on the GET endpoint.
-        // Resolve by scanning the list for a matching tinyId field instead.
-        let all = list_alerts(client, None)?;
-        return all
-            .into_iter()
-            .find(|a| a.tiny_id.as_deref() == Some(identifier))
-            .ok_or_else(|| format!("No alert found with tinyId: {}", identifier));
-    }
+/// Resolves a tinyId to a full UUID by querying the list endpoint.
+fn resolve_tiny_id(client: &Client, tiny_id: &str) -> Result<String, String> {
+    let tinyid_query = format!("tinyId:{}", tiny_id);
+    let query = [("query", tinyid_query.as_str()), ("limit", "1")];
+    let resp = client.request_jsm("GET", "/alerts", Some(&query), None)?;
+    let list_res: AlertListResponse = serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to resolve tinyId: {}. Response: {}", e, resp))?;
+    list_res
+        .values
+        .into_iter()
+        .next()
+        .map(|a| a.id)
+        .ok_or_else(|| format!("No alert found with tinyId: {}", tiny_id))
+}
 
-    let path = format!("/alerts/{}", identifier);
-    let query = [("identifierType", id_type)];
+pub fn get_alert(client: &Client, identifier: &str, id_type: &str) -> Result<Alert, String> {
+    // Atlassian JSM cloud does not honour identifierType=tinyId on the GET endpoint.
+    // Resolve to a full UUID first, then fetch the detail endpoint for complete fields.
+    let resolved_id = if id_type == "tinyId" {
+        resolve_tiny_id(client, identifier)?
+    } else {
+        identifier.to_string()
+    };
+
+    let path = format!("/alerts/{}", resolved_id);
+    let query = [("identifierType", "id")];
 
     let resp = client.request_jsm("GET", &path, Some(&query), None)?;
-    // Real Opsgenie single-alert GET returns the Alert object directly (no wrapper).
     serde_json::from_str(&resp)
         .map_err(|e| format!("Failed to parse alert: {}. Response: {}", e, resp))
+}
+
+pub fn list_alert_notes(client: &Client, alert_id: &str) -> Result<Vec<AlertNote>, String> {
+    let path = format!("/alerts/{}/notes", alert_id);
+    let query = [("identifierType", "id"), ("limit", "100"), ("order", "asc")];
+
+    let resp = client.request_jsm("GET", &path, Some(&query), None)?;
+    let res: AlertNotesResponse = serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to parse alert notes: {}. Response: {}", e, resp))?;
+
+    Ok(res.values)
+}
+
+pub fn list_alert_logs(client: &Client, alert_id: &str) -> Result<Vec<AlertLog>, String> {
+    let path = format!("/alerts/{}/logs", alert_id);
+    let query = [("identifierType", "id"), ("limit", "100"), ("order", "asc")];
+
+    let resp = client.request_jsm("GET", &path, Some(&query), None)?;
+    let res: AlertLogsResponse = serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to parse alert logs: {}. Response: {}", e, resp))?;
+
+    Ok(res.values)
 }
 
 pub fn acknowledge_alert(
