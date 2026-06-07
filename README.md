@@ -40,9 +40,17 @@ ACLI_VERSION=v0.1.0 ACLI_INSTALL_DIR=~/.local/bin \
   curl -fsSL https://raw.githubusercontent.com/neuro-ng/acli/main/install.sh | sh
 ```
 
+Uninstall:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/neuro-ng/acli/main/install.sh | sh -s -- --uninstall
+```
+
 ### Windows (PowerShell)
 
 Download `acli-<version>-x86_64-pc-windows-msvc.zip` from [GitHub Releases](https://github.com/neuro-ng/acli/releases), extract, and add to `$PATH`.
+
+To uninstall, delete `acli.exe` from wherever you placed it.
 
 ### From source
 

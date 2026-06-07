@@ -76,7 +76,7 @@ fn main() {
         }
         "alert" => handle_alert(&cmd_args[2..], profile_name.as_deref(), &output_format),
         "version" => {
-            println!("acli-rust v0.1.0");
+            println!("acli v{}", env!("CARGO_PKG_VERSION"));
             Ok(())
         }
         cmd => {

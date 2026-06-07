@@ -2,6 +2,7 @@
 # ACLI installer — downloads the correct release binary for your platform.
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/neuro-ng/acli/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/neuro-ng/acli/main/install.sh | sh -s -- --uninstall
 #   ACLI_INSTALL_DIR=~/.local/bin sh install.sh
 set -e
 
@@ -64,7 +65,27 @@ download() {
     fi
 }
 
-main() {
+uninstall() {
+    os="$(detect_os)"
+    if [ "$os" = "windows" ]; then
+        dest="${INSTALL_DIR}/${BINARY_NAME}.exe"
+    else
+        dest="${INSTALL_DIR}/${BINARY_NAME}"
+    fi
+
+    [ -f "$dest" ] || die "acli not found at ${dest}"
+
+    if [ -w "$dest" ]; then
+        rm "$dest"
+    else
+        echo "Needs sudo to remove ${dest}"
+        sudo rm "$dest"
+    fi
+
+    echo "acli uninstalled from ${dest}"
+}
+
+install() {
     os="$(detect_os)"
     target="$(detect_target)"
     version="${ACLI_VERSION:-$(get_latest_version)}"
@@ -72,14 +93,26 @@ main() {
     [ -n "$version" ] || die "Could not determine latest release version"
 
     if [ "$os" = "windows" ]; then
+        dest="${INSTALL_DIR}/${BINARY_NAME}.exe"
         archive="acli-${version}-${target}.zip"
     else
+        dest="${INSTALL_DIR}/${BINARY_NAME}"
         archive="acli-${version}-${target}.tar.gz"
     fi
 
-    url="https://github.com/${REPO}/releases/download/${version}/${archive}"
+    # Version check — skip download if already up to date.
+    if [ -x "$dest" ]; then
+        current="$("$dest" version 2>/dev/null | awk '{print $2}')"
+        if [ "$current" = "$version" ]; then
+            echo "acli ${version} is already installed at ${dest} — nothing to do."
+            exit 0
+        fi
+        echo "Upgrading acli ${current} → ${version}..."
+    else
+        echo "Installing acli ${version} (${target})..."
+    fi
 
-    echo "Installing acli ${version} (${target})..."
+    url="https://github.com/${REPO}/releases/download/${version}/${archive}"
     echo "Downloading ${url}"
 
     tmpdir="$(mktemp -d)"
@@ -91,11 +124,9 @@ main() {
         command -v unzip >/dev/null 2>&1 || die "unzip is required"
         unzip -q "${tmpdir}/${archive}" -d "${tmpdir}"
         src="${tmpdir}/${BINARY_NAME}.exe"
-        dest="${INSTALL_DIR}/${BINARY_NAME}.exe"
     else
         tar -xzf "${tmpdir}/${archive}" -C "${tmpdir}"
         src="${tmpdir}/${BINARY_NAME}"
-        dest="${INSTALL_DIR}/${BINARY_NAME}"
         chmod +x "$src"
     fi
 
@@ -110,4 +141,7 @@ main() {
     echo "Run 'acli version' to verify."
 }
 
-main
+case "${1:-}" in
+    --uninstall) uninstall ;;
+    *)           install ;;
+esac
