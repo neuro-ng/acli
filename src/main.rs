@@ -2155,7 +2155,10 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
 
             let cfg = Config::load()?;
             let prof = cfg.get_profile(profile)?;
-            let escalation_schedules = prof.defaults.as_ref().and_then(|d| d.escalation_schedules.clone());
+            let escalation_schedules = prof
+                .defaults
+                .as_ref()
+                .and_then(|d| d.escalation_schedules.clone());
             let client = Client::new(prof);
             let mut schedules = alerts::list_schedules(&client, escalation_schedules)?;
 
@@ -2174,7 +2177,10 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
                     "{:<40} {:<30} {:<40} {}",
                     schedule.id,
                     schedule.name,
-                    schedule.team_id.as_ref().unwrap_or(&"(no team)".to_string()),
+                    schedule
+                        .team_id
+                        .as_ref()
+                        .unwrap_or(&"(no team)".to_string()),
                     schedule.description.unwrap_or_default()
                 );
             }

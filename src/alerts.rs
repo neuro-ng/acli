@@ -236,8 +236,12 @@ pub fn get_oncall(client: &Client, schedule_id: Option<&str>) -> Result<Vec<Stri
     let path = format!("/schedules/{}/on-calls", sid);
 
     let resp = client.request_jsm("GET", &path, Some(&query), None)?;
-    let oncall_res: OnCallResponse = serde_json::from_str(&resp)
-        .map_err(|e| format!("Failed to parse on-call response: {}. Response: {}", e, resp))?;
+    let oncall_res: OnCallResponse = serde_json::from_str(&resp).map_err(|e| {
+        format!(
+            "Failed to parse on-call response: {}. Response: {}",
+            e, resp
+        )
+    })?;
     Ok(oncall_res.on_call_users)
 }
 
@@ -273,10 +277,17 @@ pub struct SchedulesResponse {
     pub values: Vec<Schedule>,
 }
 
-pub fn list_schedules(client: &Client, escalation_schedules: Option<Vec<crate::config::EscalationSchedule>>) -> Result<Vec<Schedule>, String> {
+pub fn list_schedules(
+    client: &Client,
+    escalation_schedules: Option<Vec<crate::config::EscalationSchedule>>,
+) -> Result<Vec<Schedule>, String> {
     let resp = client.request_jsm("GET", "/schedules", None, None)?;
-    let schedules_res: SchedulesResponse = serde_json::from_str(&resp)
-        .map_err(|e| format!("Failed to parse schedules response: {}. Response: {}", e, resp))?;
+    let schedules_res: SchedulesResponse = serde_json::from_str(&resp).map_err(|e| {
+        format!(
+            "Failed to parse schedules response: {}. Response: {}",
+            e, resp
+        )
+    })?;
 
     let mut all_schedules = schedules_res.values;
 
