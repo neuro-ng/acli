@@ -64,11 +64,11 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
-            echo "name=acli-rust.exe" >> $GITHUB_OUTPUT
-            echo "src=target/${{ matrix.target }}/release/acli-rust.exe" >> $GITHUB_OUTPUT
+            echo "name=acli.exe" >> $GITHUB_OUTPUT
+            echo "src=target/${{ matrix.target }}/release/acli.exe" >> $GITHUB_OUTPUT
           else
             echo "name=acli" >> $GITHUB_OUTPUT
-            echo "src=target/${{ matrix.target }}/release/acli-rust" >> $GITHUB_OUTPUT
+            echo "src=target/${{ matrix.target }}/release/acli" >> $GITHUB_OUTPUT
           fi
 
       - name: Package archive (tar.gz)
