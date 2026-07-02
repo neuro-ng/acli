@@ -1901,6 +1901,9 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
         println!("  create <message>      Create a new alert");
         println!("  ack <id>              Acknowledge an alert");
         println!("  close <id>            Close an alert");
+        println!("  teams                 List all teams");
+        println!("  schedules             List all schedules");
+        println!("  oncall <schedule-id>  Show who is currently on-call");
         return Ok(());
     }
 
@@ -2115,6 +2118,91 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
             let client = Client::new(cfg.get_profile(profile)?);
             let resp = alerts::close_alert(&client, identifier, id_type, note)?;
             println!("Alert closed. Response: {}", resp);
+            Ok(())
+        }
+        "teams" => {
+            let cfg = Config::load()?;
+            let client = Client::new(cfg.get_profile(profile)?);
+            let teams = alerts::list_teams(&client)?;
+
+            if output == "json" {
+                println!("{}", serde_json::to_string_pretty(&teams).unwrap());
+                return Ok(());
+            }
+
+            println!("{:<40} {:<40} DESCRIPTION", "ID", "NAME");
+            for team in teams {
+                println!(
+                    "{:<40} {:<40} {}",
+                    team.id,
+                    team.name,
+                    team.description.unwrap_or_default()
+                );
+            }
+            Ok(())
+        }
+        "schedules" => {
+            let mut exclude_team: Option<String> = None;
+            let mut i = 1;
+            while i < args.len() {
+                if args[i] == "--exclude-team" && i + 1 < args.len() {
+                    exclude_team = Some(args[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+
+            let cfg = Config::load()?;
+            let prof = cfg.get_profile(profile)?;
+            let escalation_schedules = prof.defaults.as_ref().and_then(|d| d.escalation_schedules.clone());
+            let client = Client::new(prof);
+            let mut schedules = alerts::list_schedules(&client, escalation_schedules)?;
+
+            if let Some(ref team_id) = exclude_team {
+                schedules.retain(|s| s.team_id.as_ref() != Some(team_id));
+            }
+
+            if output == "json" {
+                println!("{}", serde_json::to_string_pretty(&schedules).unwrap());
+                return Ok(());
+            }
+
+            println!("{:<40} {:<30} {:<40} DESCRIPTION", "ID", "NAME", "TEAM_ID");
+            for schedule in schedules {
+                println!(
+                    "{:<40} {:<30} {:<40} {}",
+                    schedule.id,
+                    schedule.name,
+                    schedule.team_id.as_ref().unwrap_or(&"(no team)".to_string()),
+                    schedule.description.unwrap_or_default()
+                );
+            }
+            Ok(())
+        }
+        "oncall" => {
+            if args.len() < 2 {
+                return Err("Usage: acli alert oncall <schedule-id>".to_string());
+            }
+            let schedule_id = Some(args[1].as_str());
+            let cfg = Config::load()?;
+            let client = Client::new(cfg.get_profile(profile)?);
+            let user_ids = alerts::get_oncall(&client, schedule_id)?;
+
+            if output == "json" {
+                println!("{}", serde_json::to_string_pretty(&user_ids).unwrap());
+                return Ok(());
+            }
+
+            if user_ids.is_empty() {
+                println!("No on-call users found for this schedule.");
+                return Ok(());
+            }
+
+            println!("On-call user IDs:");
+            for user_id in user_ids {
+                println!("  {}", user_id);
+            }
             Ok(())
         }
         action => Err(format!("Unknown alert action: {}", action)),

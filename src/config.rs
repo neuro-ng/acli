@@ -5,6 +5,12 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct EscalationSchedule {
+    pub name: String,
+    pub schedule_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Defaults {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -12,6 +18,8 @@ pub struct Defaults {
     pub workspace: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bb_project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escalation_schedules: Option<Vec<EscalationSchedule>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]

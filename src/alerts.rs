@@ -221,3 +221,77 @@ pub fn close_alert(
     let resp = client.request_jsm("POST", &path, Some(&query), Some(body))?;
     Ok(resp)
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct OnCallResponse {
+    #[serde(rename = "onCallUsers")]
+    pub on_call_users: Vec<String>,
+}
+
+pub fn get_oncall(client: &Client, schedule_id: Option<&str>) -> Result<Vec<String>, String> {
+    // JSM API requires schedule ID, not name. If none provided, return error.
+    let sid = schedule_id.ok_or("Schedule ID is required. Use: acli alert oncall <schedule-id>")?;
+
+    let query = [("flat", "true")];
+    let path = format!("/schedules/{}/on-calls", sid);
+
+    let resp = client.request_jsm("GET", &path, Some(&query), None)?;
+    let oncall_res: OnCallResponse = serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to parse on-call response: {}. Response: {}", e, resp))?;
+    Ok(oncall_res.on_call_users)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Team {
+    #[serde(rename = "teamId")]
+    pub id: String,
+    #[serde(rename = "teamName")]
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+pub fn list_teams(client: &Client) -> Result<Vec<Team>, String> {
+    let resp = client.request_jsm("GET", "/teams", None, None)?;
+    let teams: Vec<Team> = serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to parse teams response: {}. Response: {}", e, resp))?;
+    Ok(teams)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Schedule {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(rename = "teamId")]
+    pub team_id: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SchedulesResponse {
+    pub values: Vec<Schedule>,
+}
+
+pub fn list_schedules(client: &Client, escalation_schedules: Option<Vec<crate::config::EscalationSchedule>>) -> Result<Vec<Schedule>, String> {
+    let resp = client.request_jsm("GET", "/schedules", None, None)?;
+    let schedules_res: SchedulesResponse = serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to parse schedules response: {}. Response: {}", e, resp))?;
+
+    let mut all_schedules = schedules_res.values;
+
+    if let Some(escalations) = escalation_schedules {
+        for esc in &escalations {
+            if !all_schedules.iter().any(|s| s.id == esc.schedule_id) {
+                all_schedules.push(Schedule {
+                    id: esc.schedule_id.clone(),
+                    name: format!("{} (escalation)", esc.name),
+                    description: Some("Configured escalation schedule".to_string()),
+                    team_id: None,
+                });
+            }
+        }
+    }
+
+    Ok(all_schedules)
+}

@@ -15,13 +15,13 @@ A synchronous, dependency-light command-line interface for Atlassian Cloud produ
 
 The Go version uses `cobra` and goroutines. This port follows Rich Hickey's **Simple Made Easy** — it removes every layer that isn't load-bearing:
 
-| Concern | Choice | Why |
-|---------|--------|-----|
-| HTTP | `ureq` (blocking) | No async runtime, no thread pool, predictable stack |
-| CLI parsing | Manual `match` chains | No macro magic, easy to trace |
-| Auth | Hand-rolled Base64 | Zero deps, auditable |
-| Multipart upload | Manual boundary | No third-party crate needed |
-| ADF / XHTML render | Recursive descent | Tiny, no regex crates |
+| Concern            | Choice                | Why                                                 |
+| ------------------ | --------------------- | --------------------------------------------------- |
+| HTTP               | `ureq` (blocking)     | No async runtime, no thread pool, predictable stack |
+| CLI parsing        | Manual `match` chains | No macro magic, easy to trace                       |
+| Auth               | Hand-rolled Base64    | Zero deps, auditable                                |
+| Multipart upload   | Manual boundary       | No third-party crate needed                         |
+| ADF / XHTML render | Recursive descent     | Tiny, no regex crates                               |
 
 ---
 
@@ -197,6 +197,8 @@ acli bb pipeline log   <workspace> <slug> <pipeline-uuid> <step-uuid>
 
 Cloud ID is resolved automatically from `/_edge/tenant_info` — no manual config needed.
 
+### Alerts
+
 ```sh
 acli alert list
 acli alert list --status acknowledged
@@ -205,6 +207,17 @@ acli alert create "DB replica lag > 30s" [--priority P2] [--alias prod-db-lag]
 acli alert ack    <id> [--note "Paging oncall"]
 acli alert close  <id>
 ```
+
+### On-Call Management
+
+```sh
+acli alert teams                    # list JSM teams you have access to
+acli alert schedules                # list on-call schedules
+acli alert schedules --exclude-team <team-id>  # filter out a specific team
+acli alert oncall <schedule-id>     # show who's on-call for a schedule
+```
+
+**Escalation schedules:** The JSM API only returns schedules for teams you're a member of. To query escalation teams (APP, SRE), configure their schedule IDs in your profile.
 
 ---
 
@@ -269,10 +282,10 @@ src/
 
 ## CI / CD
 
-| Workflow | Trigger | What it does |
-|----------|---------|--------------|
-| `ci.yml` | push / PR to `main` | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` on Ubuntu + macOS + Windows |
-| `release.yml` | push tag `v*.*.*` | builds 5 targets, packages archives, uploads to GitHub Release |
+| Workflow      | Trigger             | What it does                                                                              |
+| ------------- | ------------------- | ----------------------------------------------------------------------------------------- |
+| `ci.yml`      | push / PR to `main` | `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` on Ubuntu + macOS + Windows |
+| `release.yml` | push tag `v*.*.*`   | builds 5 targets, packages archives, uploads to GitHub Release                            |
 
 Cross-compilation targets:
 
