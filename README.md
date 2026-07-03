@@ -218,7 +218,7 @@ acli alert oncall <schedule-id>     # show who's on-call for a schedule
 acli alert user <user-id>           # get user details by Opsgenie user ID
 ```
 
-**Escalation schedules:** The JSM API only returns schedules for teams you're a member of. To query escalation teams (DPT, ADT), configure their schedule IDs in your profile — see [ESCALATION_SCHEDULES.md](ESCALATION_SCHEDULES.md).
+**Escalation schedules:** The JSM API only returns schedules for teams you're a member of. To query escalation teams (APP, SRE), configure their schedule IDs in your profile.
 
 **User ID mapping:** The `oncall` command returns Jira account IDs (format `712020:...`). Use Jira's user API or the Jira web UI to resolve these to names and emails.
 
