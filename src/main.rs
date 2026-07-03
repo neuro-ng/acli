@@ -2225,21 +2225,31 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
                 return Ok(());
             }
 
-            println!("User ID: {}", user.id);
+            // Jira user fields
+            if let Some(ref account_id) = user.account_id {
+                println!("Account ID: {}", account_id);
+            }
+            if let Some(ref display_name) = user.display_name {
+                println!("Name: {}", display_name);
+            }
+            if let Some(ref email) = user.email_address {
+                println!("Email: {}", email);
+            }
+            if let Some(active) = user.active {
+                println!("Active: {}", active);
+            }
+            if let Some(ref tz) = user.time_zone {
+                println!("Timezone: {}", tz);
+            }
+            // Opsgenie user fields
+            if let Some(ref id) = user.id {
+                println!("User ID: {}", id);
+            }
             if let Some(ref full_name) = user.full_name {
-                println!("Name: {}", full_name);
+                println!("Full name: {}", full_name);
             }
             if let Some(ref username) = user.username {
                 println!("Username: {}", username);
-            }
-            if let Some(ref role) = user.role {
-                println!("Role: {}", role);
-            }
-            if let Some(blocked) = user.blocked {
-                println!("Blocked: {}", blocked);
-            }
-            if let Some(verified) = user.verified {
-                println!("Verified: {}", verified);
             }
             Ok(())
         }

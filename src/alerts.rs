@@ -309,23 +309,40 @@ pub fn list_schedules(
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct User {
-    pub id: String,
+    #[serde(rename = "accountId")]
+    pub account_id: Option<String>,
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
+    #[serde(rename = "emailAddress")]
+    pub email_address: Option<String>,
+    pub active: Option<bool>,
+    #[serde(rename = "accountType")]
+    pub account_type: Option<String>,
+    #[serde(rename = "timeZone")]
+    pub time_zone: Option<String>,
+    // Opsgenie fields (kept for backward compatibility)
+    pub id: Option<String>,
     #[serde(rename = "username")]
     pub username: Option<String>,
     #[serde(rename = "fullName")]
     pub full_name: Option<String>,
-    pub role: Option<String>,
-    pub blocked: Option<bool>,
-    pub verified: Option<bool>,
-    #[serde(rename = "createdAt")]
-    pub created_at: Option<String>,
 }
 
+/// Look up a user by ID. Auto-detects between Jira account IDs (contain `:`)
+/// and Opsgenie user IDs (plain UUIDs).
 pub fn get_user(client: &Client, user_id: &str) -> Result<User, String> {
-    let path = format!("/users/{}", user_id);
-    let query = [("identifierType", "id")];
-
-    let resp = client.request_jsm("GET", &path, Some(&query), None)?;
-    serde_json::from_str(&resp)
-        .map_err(|e| format!("Failed to parse user: {}. Response: {}", e, resp))
+    if user_id.contains(':') {
+        // Jira account ID → use Jira REST API
+        let path = format!("/rest/api/3/user?accountId={}", user_id);
+        let resp = client.request("GET", &path, None, None)?;
+        serde_json::from_str(&resp)
+            .map_err(|e| format!("Failed to parse Jira user: {}. Response: {}", e, resp))
+    } else {
+        // Opsgenie user ID → use JSM Ops API
+        let path = format!("/users/{}", user_id);
+        let query = [("identifierType", "id")];
+        let resp = client.request_jsm("GET", &path, Some(&query), None)?;
+        serde_json::from_str(&resp)
+            .map_err(|e| format!("Failed to parse user: {}. Response: {}", e, resp))
+    }
 }
