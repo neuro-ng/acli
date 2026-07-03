@@ -2211,6 +2211,38 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
             }
             Ok(())
         }
+        "user" => {
+            if args.len() < 2 {
+                return Err("Usage: acli alert user <user-id>".to_string());
+            }
+            let user_id = &args[1];
+            let cfg = Config::load()?;
+            let client = Client::new(cfg.get_profile(profile)?);
+            let user = alerts::get_user(&client, user_id)?;
+
+            if output == "json" {
+                println!("{}", serde_json::to_string_pretty(&user).unwrap());
+                return Ok(());
+            }
+
+            println!("User ID: {}", user.id);
+            if let Some(ref full_name) = user.full_name {
+                println!("Name: {}", full_name);
+            }
+            if let Some(ref username) = user.username {
+                println!("Username: {}", username);
+            }
+            if let Some(ref role) = user.role {
+                println!("Role: {}", role);
+            }
+            if let Some(blocked) = user.blocked {
+                println!("Blocked: {}", blocked);
+            }
+            if let Some(verified) = user.verified {
+                println!("Verified: {}", verified);
+            }
+            Ok(())
+        }
         action => Err(format!("Unknown alert action: {}", action)),
     }
 }

@@ -306,3 +306,26 @@ pub fn list_schedules(
 
     Ok(all_schedules)
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct User {
+    pub id: String,
+    #[serde(rename = "username")]
+    pub username: Option<String>,
+    #[serde(rename = "fullName")]
+    pub full_name: Option<String>,
+    pub role: Option<String>,
+    pub blocked: Option<bool>,
+    pub verified: Option<bool>,
+    #[serde(rename = "createdAt")]
+    pub created_at: Option<String>,
+}
+
+pub fn get_user(client: &Client, user_id: &str) -> Result<User, String> {
+    let path = format!("/users/{}", user_id);
+    let query = [("identifierType", "id")];
+
+    let resp = client.request_jsm("GET", &path, Some(&query), None)?;
+    serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to parse user: {}. Response: {}", e, resp))
+}
