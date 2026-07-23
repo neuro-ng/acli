@@ -245,6 +245,175 @@ pub fn get_oncall(client: &Client, schedule_id: Option<&str>) -> Result<Vec<Stri
     Ok(oncall_res.on_call_users)
 }
 
+/// Parses an ISO-8601 UTC timestamp (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS[Z]`)
+/// into seconds since the Unix epoch. Only UTC (`Z` or no offset) is supported.
+fn parse_iso8601_utc(s: &str) -> Result<i64, String> {
+    let err = || format!("Invalid date/time '{}'. Expected format: YYYY-MM-DDTHH:MM:SSZ", s);
+
+    let (date_part, time_part) = match s.split_once('T') {
+        Some((d, t)) => (d, t.trim_end_matches('Z')),
+        None => (s, "00:00:00"),
+    };
+
+    let date_fields: Vec<&str> = date_part.split('-').collect();
+    if date_fields.len() != 3 {
+        return Err(err());
+    }
+    let year: i64 = date_fields[0].parse().map_err(|_| err())?;
+    let month: i64 = date_fields[1].parse().map_err(|_| err())?;
+    let day: i64 = date_fields[2].parse().map_err(|_| err())?;
+
+    let time_fields: Vec<&str> = time_part.split(':').collect();
+    if time_fields.is_empty() || time_fields.len() > 3 {
+        return Err(err());
+    }
+    let hour: i64 = time_fields.first().map_or(Ok(0), |v| v.parse()).map_err(|_| err())?;
+    let minute: i64 = time_fields.get(1).map_or(Ok(0), |v| v.parse()).map_err(|_| err())?;
+    let second: i64 = time_fields
+        .get(2)
+        .map_or(Ok(0.0), |v| v.parse::<f64>())
+        .map_err(|_| err())? as i64;
+
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return Err(err());
+    }
+
+    // Howard Hinnant's days_from_civil algorithm.
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146097 + doe - 719468;
+
+    Ok(days * 86400 + hour * 3600 + minute * 60 + second)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TimelineResponder {
+    pub id: Option<String>,
+    #[serde(rename = "type")]
+    pub responder_type: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TimelinePeriod {
+    #[serde(rename = "startDate")]
+    pub start_date: String,
+    #[serde(rename = "endDate")]
+    pub end_date: String,
+    #[serde(rename = "type")]
+    pub period_type: Option<String>,
+    pub responder: Option<TimelineResponder>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct TimelineRotation {
+    pub id: Option<String>,
+    pub name: Option<String>,
+    #[serde(default)]
+    pub periods: Vec<TimelinePeriod>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+pub struct FinalTimeline {
+    #[serde(default)]
+    pub rotations: Vec<TimelineRotation>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TimelineResponse {
+    #[serde(rename = "finalTimeline")]
+    pub final_timeline: FinalTimeline,
+}
+
+/// Returns the on-call periods for a single schedule that overlap `[from, until)`.
+pub fn get_oncall_timeline(
+    client: &Client,
+    schedule_id: &str,
+    from: &str,
+    until: &str,
+) -> Result<Vec<TimelinePeriod>, String> {
+    let from_secs = parse_iso8601_utc(from)?;
+    let until_secs = parse_iso8601_utc(until)?;
+    if until_secs <= from_secs {
+        return Err("`until` must be after `from`".to_string());
+    }
+
+    let interval_days = ((until_secs - from_secs) + 86399) / 86400; // ceil to whole days
+    let interval_str = interval_days.max(1).to_string();
+    let query = [
+        ("date", from),
+        ("interval", interval_str.as_str()),
+        ("intervalUnit", "days"),
+    ];
+
+    let path = format!("/schedules/{}/timeline", schedule_id);
+    let resp = client.request_jsm("GET", &path, Some(&query), None)?;
+    let timeline: TimelineResponse = serde_json::from_str(&resp).map_err(|e| {
+        format!(
+            "Failed to parse schedule timeline: {}. Response: {}",
+            e, resp
+        )
+    })?;
+
+    let mut periods: Vec<TimelinePeriod> = timeline
+        .final_timeline
+        .rotations
+        .into_iter()
+        .flat_map(|r| r.periods.into_iter())
+        .filter(|p| {
+            let p_start = parse_iso8601_utc(&p.start_date).unwrap_or(i64::MAX);
+            let p_end = parse_iso8601_utc(&p.end_date).unwrap_or(i64::MIN);
+            p_start < until_secs && p_end > from_secs
+        })
+        .collect();
+
+    periods.sort_by(|a, b| a.start_date.cmp(&b.start_date));
+    Ok(periods)
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ScheduleOnCall {
+    #[serde(rename = "scheduleId")]
+    pub schedule_id: String,
+    #[serde(rename = "scheduleName")]
+    pub schedule_name: String,
+    pub periods: Vec<TimelinePeriod>,
+    pub error: Option<String>,
+}
+
+/// Returns on-call periods across multiple schedules for `[from, until)`.
+/// A failure on one schedule is recorded in `ScheduleOnCall.error` rather than
+/// aborting the whole lookup, so one broken schedule doesn't block the rest.
+pub fn get_oncall_timeline_for_schedules(
+    client: &Client,
+    schedules: &[Schedule],
+    from: &str,
+    until: &str,
+) -> Vec<ScheduleOnCall> {
+    schedules
+        .iter()
+        .map(
+            |s| match get_oncall_timeline(client, &s.id, from, until) {
+                Ok(periods) => ScheduleOnCall {
+                    schedule_id: s.id.clone(),
+                    schedule_name: s.name.clone(),
+                    periods,
+                    error: None,
+                },
+                Err(e) => ScheduleOnCall {
+                    schedule_id: s.id.clone(),
+                    schedule_name: s.name.clone(),
+                    periods: Vec::new(),
+                    error: Some(e),
+                },
+            },
+        )
+        .collect()
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Team {
     #[serde(rename = "teamId")]
@@ -326,6 +495,16 @@ pub struct User {
     pub username: Option<String>,
     #[serde(rename = "fullName")]
     pub full_name: Option<String>,
+}
+
+/// Looks up a user directly via the Jira REST API by account ID.
+/// Schedule timeline responders are always Atlassian account IDs (with or
+/// without the `<siteId>:` prefix), so this bypasses `get_user`'s heuristic.
+pub fn get_jira_user(client: &Client, account_id: &str) -> Result<User, String> {
+    let path = format!("/rest/api/3/user?accountId={}", account_id);
+    let resp = client.request("GET", &path, None, None)?;
+    serde_json::from_str(&resp)
+        .map_err(|e| format!("Failed to parse Jira user: {}. Response: {}", e, resp))
 }
 
 /// Look up a user by ID. Auto-detects between Jira account IDs (contain `:`)

@@ -1904,6 +1904,9 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
         println!("  teams                 List all teams");
         println!("  schedules             List all schedules");
         println!("  oncall <schedule-id>  Show who is currently on-call");
+        println!("  oncall --from <iso> --until <iso> [<schedule-id> ...]");
+        println!("                        List who is on-call in a date/time range,");
+        println!("                        across the given schedules (or all schedules)");
         return Ok(());
     }
 
@@ -2187,13 +2190,120 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
             Ok(())
         }
         "oncall" => {
-            if args.len() < 2 {
-                return Err("Usage: acli alert oncall <schedule-id>".to_string());
+            let mut from: Option<String> = None;
+            let mut until: Option<String> = None;
+            let mut schedule_ids: Vec<String> = Vec::new();
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--from" if i + 1 < args.len() => {
+                        from = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    "--until" if i + 1 < args.len() => {
+                        until = Some(args[i + 1].clone());
+                        i += 2;
+                    }
+                    other => {
+                        schedule_ids.push(other.to_string());
+                        i += 1;
+                    }
+                }
             }
-            let schedule_id = Some(args[1].as_str());
+
             let cfg = Config::load()?;
-            let client = Client::new(cfg.get_profile(profile)?);
-            let user_ids = alerts::get_oncall(&client, schedule_id)?;
+            let prof = cfg.get_profile(profile)?;
+            let client = Client::new(prof.clone());
+
+            // Range mode: --from/--until given → list on-call assignments across
+            // a date/time range, for the given schedules or all schedules.
+            if let (Some(from), Some(until)) = (from, until) {
+                let schedules = if schedule_ids.is_empty() {
+                    let escalation_schedules = prof
+                        .defaults
+                        .as_ref()
+                        .and_then(|d| d.escalation_schedules.clone());
+                    alerts::list_schedules(&client, escalation_schedules)?
+                } else {
+                    let all = alerts::list_schedules(&client, None)?;
+                    schedule_ids
+                        .iter()
+                        .filter_map(|id| {
+                            all.iter().find(|s| &s.id == id || &s.name == id).cloned()
+                        })
+                        .collect()
+                };
+
+                if schedules.is_empty() {
+                    println!("No matching schedules found.");
+                    return Ok(());
+                }
+
+                let results =
+                    alerts::get_oncall_timeline_for_schedules(&client, &schedules, &from, &until);
+
+                if output == "json" {
+                    println!("{}", serde_json::to_string_pretty(&results).unwrap());
+                    return Ok(());
+                }
+
+                // Resolve each unique responder id to a display name once.
+                let mut names: std::collections::HashMap<String, String> =
+                    std::collections::HashMap::new();
+                for sched in &results {
+                    for period in &sched.periods {
+                        if let Some(id) = period.responder.as_ref().and_then(|r| r.id.clone()) {
+                            names.entry(id).or_default();
+                        }
+                    }
+                }
+                for (id, name) in names.iter_mut() {
+                    let user = alerts::get_jira_user(&client, id).or_else(|_| alerts::get_user(&client, id));
+                    *name = match user {
+                        Ok(u) => u
+                            .display_name
+                            .or(u.full_name)
+                            .or(u.username)
+                            .or(u.email_address)
+                            .unwrap_or_else(|| id.clone()),
+                        Err(_) => id.clone(),
+                    };
+                }
+
+                println!("{:<30} {:<25} {:<25} ON-CALL", "SCHEDULE", "START", "END");
+                for sched in &results {
+                    if let Some(err) = &sched.error {
+                        println!("{:<30} (error: {})", sched.schedule_name, err);
+                        continue;
+                    }
+                    if sched.periods.is_empty() {
+                        println!("{:<30} (no on-call assignments in range)", sched.schedule_name);
+                        continue;
+                    }
+                    for period in &sched.periods {
+                        let who = period
+                            .responder
+                            .as_ref()
+                            .and_then(|r| r.id.as_ref())
+                            .and_then(|id| names.get(id).cloned())
+                            .unwrap_or_else(|| "unassigned".to_string());
+                        println!(
+                            "{:<30} {:<25} {:<25} {}",
+                            sched.schedule_name, period.start_date, period.end_date, who
+                        );
+                    }
+                }
+                return Ok(());
+            }
+
+            // Legacy mode: single schedule, current on-call only.
+            if schedule_ids.len() != 1 {
+                return Err(
+                    "Usage: acli alert oncall <schedule-id>\n   or: acli alert oncall --from <iso> --until <iso> [<schedule-id> ...]"
+                        .to_string(),
+                );
+            }
+            let user_ids = alerts::get_oncall(&client, Some(schedule_ids[0].as_str()))?;
 
             if output == "json" {
                 println!("{}", serde_json::to_string_pretty(&user_ids).unwrap());
