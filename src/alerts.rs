@@ -248,7 +248,12 @@ pub fn get_oncall(client: &Client, schedule_id: Option<&str>) -> Result<Vec<Stri
 /// Parses an ISO-8601 UTC timestamp (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS[Z]`)
 /// into seconds since the Unix epoch. Only UTC (`Z` or no offset) is supported.
 fn parse_iso8601_utc(s: &str) -> Result<i64, String> {
-    let err = || format!("Invalid date/time '{}'. Expected format: YYYY-MM-DDTHH:MM:SSZ", s);
+    let err = || {
+        format!(
+            "Invalid date/time '{}'. Expected format: YYYY-MM-DDTHH:MM:SSZ",
+            s
+        )
+    };
 
     let (date_part, time_part) = match s.split_once('T') {
         Some((d, t)) => (d, t.trim_end_matches('Z')),
@@ -267,8 +272,14 @@ fn parse_iso8601_utc(s: &str) -> Result<i64, String> {
     if time_fields.is_empty() || time_fields.len() > 3 {
         return Err(err());
     }
-    let hour: i64 = time_fields.first().map_or(Ok(0), |v| v.parse()).map_err(|_| err())?;
-    let minute: i64 = time_fields.get(1).map_or(Ok(0), |v| v.parse()).map_err(|_| err())?;
+    let hour: i64 = time_fields
+        .first()
+        .map_or(Ok(0), |v| v.parse())
+        .map_err(|_| err())?;
+    let minute: i64 = time_fields
+        .get(1)
+        .map_or(Ok(0), |v| v.parse())
+        .map_err(|_| err())?;
     let second: i64 = time_fields
         .get(2)
         .map_or(Ok(0.0), |v| v.parse::<f64>())
@@ -395,22 +406,20 @@ pub fn get_oncall_timeline_for_schedules(
 ) -> Vec<ScheduleOnCall> {
     schedules
         .iter()
-        .map(
-            |s| match get_oncall_timeline(client, &s.id, from, until) {
-                Ok(periods) => ScheduleOnCall {
-                    schedule_id: s.id.clone(),
-                    schedule_name: s.name.clone(),
-                    periods,
-                    error: None,
-                },
-                Err(e) => ScheduleOnCall {
-                    schedule_id: s.id.clone(),
-                    schedule_name: s.name.clone(),
-                    periods: Vec::new(),
-                    error: Some(e),
-                },
+        .map(|s| match get_oncall_timeline(client, &s.id, from, until) {
+            Ok(periods) => ScheduleOnCall {
+                schedule_id: s.id.clone(),
+                schedule_name: s.name.clone(),
+                periods,
+                error: None,
             },
-        )
+            Err(e) => ScheduleOnCall {
+                schedule_id: s.id.clone(),
+                schedule_name: s.name.clone(),
+                periods: Vec::new(),
+                error: Some(e),
+            },
+        })
         .collect()
 }
 

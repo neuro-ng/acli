@@ -2228,9 +2228,7 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
                     let all = alerts::list_schedules(&client, None)?;
                     schedule_ids
                         .iter()
-                        .filter_map(|id| {
-                            all.iter().find(|s| &s.id == id || &s.name == id).cloned()
-                        })
+                        .filter_map(|id| all.iter().find(|s| &s.id == id || &s.name == id).cloned())
                         .collect()
                 };
 
@@ -2258,7 +2256,8 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
                     }
                 }
                 for (id, name) in names.iter_mut() {
-                    let user = alerts::get_jira_user(&client, id).or_else(|_| alerts::get_user(&client, id));
+                    let user = alerts::get_jira_user(&client, id)
+                        .or_else(|_| alerts::get_user(&client, id));
                     *name = match user {
                         Ok(u) => u
                             .display_name
@@ -2277,7 +2276,10 @@ fn handle_alert(args: &[String], profile: Option<&str>, output: &str) -> Result<
                         continue;
                     }
                     if sched.periods.is_empty() {
-                        println!("{:<30} (no on-call assignments in range)", sched.schedule_name);
+                        println!(
+                            "{:<30} (no on-call assignments in range)",
+                            sched.schedule_name
+                        );
                         continue;
                     }
                     for period in &sched.periods {
